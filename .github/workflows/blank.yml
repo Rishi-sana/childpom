@@ -1,0 +1,96 @@
+name: Build and Deploy
+on:
+  workflow_dispatch:
+    inputs:
+      application:
+        type: string
+        required: true
+      featureBranch:
+        type: string
+        required: true
+      xref:
+        type: string
+        required: false
+      ciWorkerType:
+        type: choice
+        required: true
+        description: Size of the worker(s) Micro (0.1 vCores), Small (0.2 vCores), Medium (1 vCores), Large (2 vCores), xLarge (4 vCores)
+        options:
+          - Micro
+          - Small
+          - Medium
+          - Large
+          - xLarge
+      ciWorker:
+        type: choice
+        required: true
+        description: Number of workers
+        options:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+run-name: ${{ github.workflow }} - ${{ inputs.application }} -> Sandbox to dev
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        steps:
+        - name: Checkout this repo
+          uses: actions/checkout@v3
+        - name: Cache dependencies
+          uses: actions/cache@v3
+          with:
+            path: ~/.m2/repository
+            key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+            restore-keys: |
+              ${{ runner.os }}-maven-
+        - name: Set up JDK 1.8
+          uses: actions/setup-java@v3
+          with:
+            distribution: 'zulu'
+            java-version: 8
+        - name: Build with Maven
+          run: mvn -B package --file pom.xml -DskipMunitTests
+        - name: Stamp artifact file name with commit hash
+          run: |
+            artifactName1=$(ls target/*.jar | head -1)
+            commitHash=$(git rev-parse --short "$GITHUB_SHA")
+            artifactName2=$(ls target/*.jar | head -1 | sed "s/.jar/-$commitHash.jar/g")
+            mv $artifactName1 $artifactName2
+        - name: Upload artifact 
+          uses: actions/upload-artifact@v3
+          with:
+              name: artifacts
+              path: target/*.jar
+    deploy:
+        needs: build
+        runs-on: ubuntu-latest
+        steps:    
+        - name: Checkout this repo
+          uses: actions/checkout@v3
+        - name: Cache dependencies
+          uses: actions/cache@v3
+          with:
+            path: ~/.m2/repository
+            key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+            restore-keys: |
+              ${{ runner.os }}-maven-
+        - uses: actions/download-artifact@v3
+          with:
+            name: artifacts
+        - name: Deploy
+          run: |
+            artifactName=$(ls *.jar | head -1)
+            mvn deploy -DskipMunitTests -DmuleDeploy \
+             -Dmule.artifact=$artifactName \
+             -Dcli.ClientId=f44ba12c6ec74fa1b205b471e62620de \
+             -Dcli.ClientSecret=88fAD6D8c108413B95C80C722DdFA224 \
+             -Dcl.env.name=Sandbox \
+             -Dcl.app.name=${{ inputs.application }} \
+             -Dcl.region=us-east-1 \
+             -Dcl.workers=${{ inputs.ciWorker }} \
+             -Dcl.worker.type=${{ inputs.ciWorkerType }} \
+             -Dcl.businessGroup=auropro 
