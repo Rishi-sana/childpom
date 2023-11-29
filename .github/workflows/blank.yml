@@ -49,7 +49,7 @@ jobs:
         with:
           repository: 'Rishi-sana/demo-parent-pom'
           ref: 'main'
-          token: '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'
+          
           path: 'demo-parent-pom'
       - name: Maven Install Parent Pom
         working-directory: 'demo-parent-pom'
