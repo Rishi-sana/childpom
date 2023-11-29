@@ -41,7 +41,9 @@ jobs:
       JAVA_DISTRIBUTION: 'temurin'
       CACHE_PATH: '~/.m2/repository'
     steps:
-      
+      - uses: actions/checkout@v2
+        with:
+          ref: ${{ inputs.application }}
       - name: Checkout mulesoft-deployment-actions
         uses: actions/checkout@v2
       - name: Checkout Parent Pom Repository
