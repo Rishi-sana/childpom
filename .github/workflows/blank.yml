@@ -1,16 +1,14 @@
-name: Build and Deploy
+name: Mulesoft Deployment - DEV
+
 on:
   workflow_dispatch:
     inputs:
       application:
         type: string
         required: true
-      featureBranch:
-        type: string
-        required: true
       xref:
         type: string
-        required: false
+        required: true
       ciWorkerType:
         type: choice
         required: true
@@ -32,87 +30,86 @@ on:
           - 4
           - 5
           - 6
-run-name: ${{ github.workflow }} - ${{ inputs.application }} -> Sandbox to dev
-
 jobs:
-    deploy:
-      name: Deploy
-      runs-on: ubuntu-latest
-      env:
-        ENV: dev
-        JAVA_VERSION: 8
-        MAVEN_VERSION: '3.8.6'
-        JAVA_DISTRIBUTION: 'temurin'
-        CACHE_PATH: '~/.m2/repository'
-      steps:
-        - name: Checkout mulesoft-deployment-actions
-          uses: actions/checkout@v2
-        - name: Checkout Parent Pom Repository
-          uses: actions/checkout@v2
-          with:
-            repository: 'Rishi-sana/demo-parent-pom'
-            ref: 'main'
-            token: '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'
-            path: 'demo-parent-pom'
-        - name: Maven Install Parent Pom
-          working-directory: 'demo-parent-pom'
-          	run: |
-                mvn -q clean install
-        - name: Checkout Remote Repository
-          uses: actions/checkout@v2
-          with:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    env:
+      ENV: dev
+      JAVA_VERSION: 8
+      MAVEN_VERSION: '3.8.6'
+      JAVA_DISTRIBUTION: 'temurin'
+      CACHE_PATH: '~/.m2/repository'
+    steps:
+      
+      - name: Checkout mulesoft-deployment-actions
+        uses: actions/checkout@v2
+      - name: Checkout Parent Pom Repository
+        uses: actions/checkout@v2
+        with:
+          repository: 'Rishi-sana/demo-parent-pom'
+          ref: 'main'
+          token: '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'
+          path: 'demo-parent-pom'
+      - name: Maven Install Parent Pom
+        working-directory: 'demo-parent-pom'
+        run: |
+          mvn -q clean install
+      - name: Checkout Remote Repository
+        uses: actions/checkout@v2
+        with:
             repository: Rishi-sana/${{ inputs.application }}
             ref: dev
             token: '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'
             path: ${{ inputs.application }} 
-        - name: Setup Java
-          uses: actions/setup-java@v3
-          with:
-            overwrite-settings: false
-            java-version: '${{ env.JAVA_VERSION }}'
-            distribution: '${{ env.JAVA_DISTRIBUTION }}'
-        - name: Setup Caching
-          uses: actions/cache@v3
-          with:
-            path: |
-              ${{ env.CACHE_PATH }}
-            key: ${{ runner.os }}-jdk${{ env.JAVA_VERSION }}-${{ env.JAVA_DISTRIBUTION }}-maven${{ env.MAVEN_VERSION }}-${{ hashFiles('**/pom.xml') }}
-            restore-keys: ${{ runner.os }}-jdk${{ env.JAVA_VERSION }}-${{ env.JAVA_DISTRIBUTION }}-maven${{ env.MAVEN_VERSION }}-
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          overwrite-settings: false
+          java-version: '${{ env.JAVA_VERSION }}'
+          distribution: '${{ env.JAVA_DISTRIBUTION }}'
+      - name: Setup Caching
+        uses: actions/cache@v3
+        with:
+          path: |
+            ${{ env.CACHE_PATH }}
+          key: ${{ runner.os }}-jdk${{ env.JAVA_VERSION }}-${{ env.JAVA_DISTRIBUTION }}-maven${{ env.MAVEN_VERSION }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-jdk${{ env.JAVA_VERSION }}-${{ env.JAVA_DISTRIBUTION }}-maven${{ env.MAVEN_VERSION }}-
+
+      - name: Setup Maven
+        uses: stCarolas/setup-maven@v4.5
+        if: ${{ env.MAVEN_VERSION }} != steps.current-maven.outputs.version
+        with:
+          maven-version: '${{ env.MAVEN_VERSION }}'
+
+      - name: Setup Maven Environment
+        uses: s4u/maven-settings-action@v2.8.0
           
-        - name: Setup Maven
-          uses: stCarolas/setup-maven@v4.5
-          if: ${{ env.MAVEN_VERSION }} != steps.current-maven.outputs.version
-          with:
-            maven-version: '${{ env.MAVEN_VERSION }}'
-          
-        - name: Setup Maven Environment
-          uses: s4u/maven-settings-action@v2.8.0
+      - name: Maven Config
+        working-directory: ${{ inputs.application }}
+        run: |
+          mvn -q -U --batch-mode -s ./.github/workflows/maven/MyGlobalSettings.xml clean install -Dcl.org="e2b9d8e9-dd54-49dd-a84d-5bd13db751ba"
             
-        - name: Maven Config
-          working-directory: ${{ inputs.application }}
-          run: |
-            mvn -q -U --batch-mode -s ./.github/workflows/maven/MyGlobalSettings.xml clean install -Dcl.org="e2b9d8e9-dd54-49dd-a84d-5bd13db751ba"
-              
-        - name: Build and Package Application
-          working-directory: ${{ inputs.application }}
-          run: |
-            mvn -B -U -q clean package -DskipTests
-        
-        - name: Unit Testing & Code Coverage Analysis
-          working-directory: ${{ inputs.application }}
-          run: |
-            mvn -B -q test -Dmule.env=dev
-        - name: Deploy
-          working-directory: ${{ inputs.application }}
-          run: |
-              artifactName=$(ls *.jar | head -1)
-              mvn deploy -DskipMunitTests -DmuleDeploy \
-               -Dmule.artifact=$artifactName \
-               -Dcli.ClientId=f44ba12c6ec74fa1b205b471e62620de \
-               -Dcli.ClientSecret=88fAD6D8c108413B95C80C722DdFA224 \
-               -Dcl.env.name=Sandbox \
-               -Dcl.app.name=${{ inputs.application }} \
-               -Dcl.region=us-east-1 \
-               -Dcl.workers=${{ inputs.ciWorker }} \
-               -Dcl.worker.type=${{ inputs.ciWorkerType }} \
-               -Dcl.businessGroup=auropro 
+      - name: Build and Package Application
+        working-directory: ${{ inputs.application }}
+        run: |
+          mvn -B -U -q clean package -DskipTests
+
+      - name: Unit Testing & Code Coverage Analysis
+        working-directory: ${{ inputs.application }}
+        run: |
+          mvn -B -q test -Dmule.env=dev
+      - name: Deploy
+        working-directory: ${{ inputs.application }}
+        run: |
+            artifactName=$(ls *.jar | head -1)
+            mvn deploy -DskipMunitTests -DmuleDeploy \
+             -Dmule.artifact=$artifactName \
+             -Dcli.ClientId=f44ba12c6ec74fa1b205b471e62620de \
+             -Dcli.ClientSecret=88fAD6D8c108413B95C80C722DdFA224 \
+             -Dcl.env.name=Sandbox \
+             -Dcl.app.name=${{ inputs.application }} \
+             -Dcl.region=us-east-1 \
+             -Dcl.workers=${{ inputs.ciWorker }} \
+             -Dcl.worker.type=${{ inputs.ciWorkerType }} \
+             -Dcl.businessGroup=auropro 
