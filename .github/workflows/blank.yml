@@ -86,7 +86,7 @@ jobs:
       - name: Maven Config
         working-directory: ${{ inputs.application }}
         run: |
-          mvn -q -U --batch-mode -s ./.github/workflows/maven/MyGlobalSettings.xml clean install -Dcl.org="e2b9d8e9-dd54-49dd-a84d-5bd13db751ba"
+          mvn -q -U --batch-mode -s ./.github/workflows/maven/MyGlobalSettings.xml clean install 
             
       - name: Build and Package Application
         working-directory: ${{ inputs.application }}
